@@ -1,84 +1,99 @@
+import argparse
 import os
 import os.path
 import re
-import sys
 import pandas as pd
 import sqlite3
 
-''' TODO
-Refactor
-keep old outputs and generate unique filename for new outputs
-'''
 
-
-ARG_INPUT_FILE_PATH = 'INPUT_FILE_PATH'
-DEFAULT_TABLE_NAME_FOR_CSV = 'csv_data'
-OUTPUT_FILE_PATH = 'out/output-sqlite.db'
+DEFAULT_TABLE_NAME_FOR_CSV = "csv_data"
+OUTPUT_FILE_PATH = "out/output-sqlite.db"
+PROGRAM_NAME = "spreadsheet2db.sh"
 
 
 def main():
     program_args = parse_program_args()
-    input_filename = program_args[ARG_INPUT_FILE_PATH]
 
-    if input_filename.lower().endswith('csv'):
-        print('Reading CSV input file')
-        df = pd.read_csv(input_filename)
-        # dictionary of spreadsheet names to their corresponding dataframes
-        sheet_to_df_map = {DEFAULT_TABLE_NAME_FOR_CSV: df}
-    else:
-        print('Reading Excel input file')
-        excel_file = pd.ExcelFile(input_filename)
-        # dictionary of spreadsheet names to their corresponding dataframes
-        sheet_to_df_map = {}
-        for sheet_name in excel_file.sheet_names:
-            print(f'Reading sheet "{sheet_name}"')
-            sheet_to_df_map[sheet_name] = pd.read_excel(excel_file, sheet_name)
+    # load a dictionary of spreadsheet names mapped to their corresponding pandas dataframes
+    sheets_to_dfs = load_spreadsheet_file_into_dataframes(program_args.input_file_path, program_args.delim)
 
-    conn = None
+    if os.path.isfile(OUTPUT_FILE_PATH):
+        os.remove(OUTPUT_FILE_PATH)
+
+    db_conn = None
+    print(f'Writing SQLite database to "{OUTPUT_FILE_PATH}"...')
 
     try:
-        if os.path.isfile(OUTPUT_FILE_PATH):
-            os.remove(OUTPUT_FILE_PATH)
+        db_conn = sqlite3.connect(OUTPUT_FILE_PATH)
+        cur = db_conn.cursor()
 
-        conn = sqlite3.connect(OUTPUT_FILE_PATH)
-        cur = conn.cursor()
-
-        print(f'Writing to: {OUTPUT_FILE_PATH}')
-
-        for sheet_name in sheet_to_df_map:
-            sheet_df = sheet_to_df_map[sheet_name]
-
-            for col_name in sheet_df.columns.to_list():
-                sheet_df.rename({col_name: sanitize_name_for_sql(col_name)}, axis='columns', inplace=True)
-
+        for sheet_name, sheet_df in sheets_to_dfs.items():
             table_name = sanitize_name_for_sql(sheet_name)
+            sanitize_column_names_for_sql(sheet_df)
             column_names = sheet_df.columns.to_list()
-            table_sql = f'CREATE TABLE {table_name} ({" text, ".join(column_names)} text)'
+            cur.execute(f"CREATE TABLE {table_name} ({' text, '.join(column_names)} text)")
+            sheet_df.to_sql(table_name, db_conn, if_exists="append", index=False)
 
-            cur.execute(table_sql)
-            sheet_df.to_sql(table_name, conn, if_exists='append', index=False)
+        db_conn.commit()
     finally:
-        if conn:
-            conn.close()
+        if db_conn:
+            db_conn.close()
 
-    print('Done')
+    print("Done")
 
 
 def parse_program_args():
-    if len(sys.argv) < 2:
-        print_usage_and_exit()
+    parser = argparse.ArgumentParser(prog=PROGRAM_NAME,
+                                     description="Load a CSV or Excel file into a SQLite database file.")
+    parser.add_argument("input_file_path", metavar="INPUT_FILE_PATH", help="Path to the CSV or Excel file.")
+    parser.add_argument("--delim", default=",",
+                        help="Specifies the CSV delimiter. The default is comma (,). "
+                             + "Examples: \"--delim ';'\" OR \"--delim tab\". "
+                             + 'Note that the word "tab" can be used for tab-delimited files.')
+    args = parser.parse_args()
 
-    return {ARG_INPUT_FILE_PATH: sys.argv[1]}
+    if args.delim == "tab":
+        args.delim = "\t"
+
+    return args
 
 
-def print_usage_and_exit():
-    print('Usage: python main.py <input_file_path>')
-    sys.exit(1)
+def load_spreadsheet_file_into_dataframes(input_file_path, csv_delimiter):
+    """
+    Loads the specified CSV or Excel file into a map of sheet names to their corresponding dataframes.
+    In the case of CSVs a default sheet name is used.
+
+    :param input_file_path: the path to the input file.
+    :param csv_delimiter: the delimiter to be used if the file is a CSV.
+    :return dict: a dictionary of sheet names to their corresponding dataframes.
+    """
+
+    if input_file_path.lower().endswith("csv"):
+        print("Reading input file as CSV...")
+        df = pd.read_csv(input_file_path, delimiter=csv_delimiter)
+        sheet_to_df_map = {DEFAULT_TABLE_NAME_FOR_CSV: df}
+    else:
+        print("Reading input file as Excel...")
+        excel_file = pd.ExcelFile(input_file_path)
+        sheet_to_df_map = {}
+        for sheet_name in excel_file.sheet_names:
+            print(f"  Reading sheet '{sheet_name}'...")
+            sheet_to_df_map[sheet_name] = pd.read_excel(excel_file, sheet_name)
+
+    return sheet_to_df_map
 
 
 def sanitize_name_for_sql(sheet_name):
-    return re.sub(r'\s', '_', sheet_name)
+    if sheet_name[0].isdigit():
+        sheet_name = "_" + sheet_name
+
+    return re.sub(r"\W", "_", sheet_name)
 
 
-if __name__ == '__main__':
+def sanitize_column_names_for_sql(sheet_df):
+    for col_name in sheet_df.columns.to_list():
+        sheet_df.rename({col_name: sanitize_name_for_sql(col_name)}, axis="columns", inplace=True)
+
+
+if __name__ == "__main__":
     main()

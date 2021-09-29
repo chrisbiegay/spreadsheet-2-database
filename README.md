@@ -6,14 +6,22 @@ Utility for dumping a CSV or Excel file into a SQLite database.
 * Python 3.x is installed and on the execution path.
 
 
-# Working with the project
-From within the spreadsheet-2-database directory:
+# Environment Setup
+    python3 -m venv .venv               # Run if the .venv directory does not already exist
+    source .venv/bin/activate           # Activate the Python virtual environment in the current shell
+    pip install -r requirements.txt     # Run once after creating the .venv directory in step 1
 
-    python3 -m venv .venv                       # Run if the .venv directory does not already exist
-    source .venv/bin/activate                   # Activate the Python virtual environment in the current shell
-    pip install -r requirements.txt             # Run once after creating the .venv directory in step 1
-    make run input_file=example/example1.csv    # Run the program against example1.csv
-    deactivate                                  # Deactivate the Python virtual environment when finished
+
+# Running the App
+Make sure the python environment is set up first.
+
+Run this example command from within the `spreadsheet-2-database` directory:
+
+    ./spreadsheet2db.sh example/example1.csv
+
+To see the program usage:
+
+    ./spreadsheet2db.sh -h
 
 
 # IntelliJ Setup
