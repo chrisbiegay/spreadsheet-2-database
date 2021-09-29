@@ -1,2 +1,2 @@
 run:
-	@python ./python/main/main.py example/example1.csv
+	@python ./python/main/main.py $(input_file)
