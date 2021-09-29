@@ -17,11 +17,11 @@ def main():
     # load a dictionary of spreadsheet names mapped to their corresponding pandas dataframes
     sheets_to_dfs = load_spreadsheet_file_into_dataframes(program_args.input_file_path, program_args.delim)
 
-    if os.path.isfile(OUTPUT_FILE_PATH):
-        os.remove(OUTPUT_FILE_PATH)
+    delete_output_file()
+    create_output_directory()
 
     db_conn = None
-    print(f'Writing SQLite database to "{OUTPUT_FILE_PATH}"...')
+    print(f'Writing SQLite database to "{os.path.abspath(OUTPUT_FILE_PATH)}"...')
 
     try:
         db_conn = sqlite3.connect(OUTPUT_FILE_PATH)
@@ -81,6 +81,17 @@ def load_spreadsheet_file_into_dataframes(input_file_path, csv_delimiter):
             sheet_to_df_map[sheet_name] = pd.read_excel(excel_file, sheet_name)
 
     return sheet_to_df_map
+
+
+def delete_output_file():
+    if os.path.isfile(OUTPUT_FILE_PATH):
+        os.remove(OUTPUT_FILE_PATH)
+
+
+def create_output_directory():
+    output_file_directory = os.path.split(OUTPUT_FILE_PATH)[0]
+    if not os.path.exists(output_file_directory):
+        os.mkdir(output_file_directory)
 
 
 def sanitize_name_for_sql(sheet_name):
